@@ -1,0 +1,118 @@
+<?php
+// $Id: cck_schema.module,v 1.1.2.4.2.5 2009/10/03 18:29:22 kratib Exp $
+
+function cck_schema_menu() {
+  $items['admin/content/types/schema'] = array(
+    'title' => t('Schema'),
+    'type' => MENU_LOCAL_TASK,
+    'page callback' => 'cck_schema_render',
+    'access arguments' => array('administer content types'),
+    'weight' => 10,
+  );
+  return $items;
+}
+
+function cck_schema_render() {
+  require_once(_graphviz_create_filepath(variable_get('graphviz_filter_pear_path', ''), 'Image/GraphViz.php'));
+  $G = new Image_Graphviz(TRUE);
+  foreach (taxonomy_get_vocabularies() as $vid => $vocabulary) {
+    $G->addNode($vid, array(
+      'shape' => 'ellipse',
+      'label' => $vocabulary->name,
+      'URL' => url('admin/content/taxonomy/'.$vid),
+    ));
+  }
+  foreach (content_types() as $type) {
+    $fields = array();
+    if ($type['has_title']) {
+      $fields[] = '+ '.$type['title_label'].' (title) : text';
+    }
+    if ($type['has_body']) {
+      $fields[] = '+ '.$type['body_label'].' (body) : text';
+    }
+    foreach ($type['fields'] as $key => $field) {
+      $fields[] = '+ '.$field['widget']['label'].' ('.$key.') : '.$field['type'];
+      if ($field['type'] == 'nodereference') {
+        foreach (array_filter($field['referenceable_types']) as $ref) {
+          $G->addEdge(array($type['type'] => $ref), array(
+            'headlabel' => _cck_schema_nodereference_cardinality($field),
+            'taillabel' => '0..*',
+          ));
+        }
+      }
+      if ($field['type'] == 'userreference') {
+        $G->addEdge(array($type['type'] => 'users'), array(
+          'headlabel' => _cck_schema_nodereference_cardinality($field),
+          'taillabel' => '0..*',
+        ));
+      }
+    }
+    foreach (taxonomy_get_vocabularies($type['type']) as $vid => $vocabulary) {
+      $G->addEdge(array($type['type'] => $vid), array(
+        'style' => 'dotted',
+      ));
+    }
+    $G->addNode($type['type'], array(
+      'shape' => 'record',
+      'label' => '{'.$type['name'].' ('.$type['type'].')|'.implode('\l', $fields).'\l}',
+      'URL' => url('admin/content/node-type/'.$type['url_str']),
+    ));
+  }
+  $G->addNode('users',array(
+    'shape' => 'record',
+    'label' => 'User',
+  ));
+
+  _cck_schema_relativity($G);
+
+  return graphviz_filter_render($G);
+}
+
+function _cck_schema_nodereference_cardinality($field) {
+  if ($field['required']) {
+    if ($field['multiple']) {
+      return '1..*';
+    }
+    else {
+      return '1';
+    }
+  }
+  else {
+    if ($field['multiple']) {
+      return '0..*';
+    }
+    else {
+      return '0..1';
+    }
+  }
+}
+
+function _cck_schema_relativity(&$G) {
+  if (!module_exists('relativity')) return;
+  foreach (variable_get('relativity_allow_types', array()) as $type) {
+    foreach (variable_get("relativity_type_$type", array()) as $child) {
+      if ($child == 'default') continue;
+      $G->addEdge(array($type => $child), array(
+        'taillabel' => _cck_schema_relativity_cardinality($child),
+        'headlabel' => '0..*',
+        'style' => 'dashed',
+      ));
+    }
+  }
+}
+
+function _cck_schema_relativity_cardinality($child) {
+  switch (variable_get("relativity_parent_ord_$child", '')) {
+  case 'any':
+    return '0..*';
+  case 'one':
+    return '1';
+  case 'none':
+    return '0';
+  case 'one or more':
+    return '1..*';
+  default:
+    return '?';
+  }
+}
+

@@ -1,0 +1,15 @@
+; $Id: taxonomy_graph.info,v 1.1.2.1 2009/10/03 18:29:51 kratib Exp $
+name = Taxonomy Graph
+description = Produces a taxonomy graph using Graphviz.
+dependencies[] = taxonomy
+dependencies[] = graphviz_filter
+package = Taxonomy
+core = 6.x
+
+
+; Information added by drupal.org packaging script on 2010-02-10
+version = "6.x-1.6"
+core = "6.x"
+project = "graphviz_filter"
+datestamp = "1265841009"
+

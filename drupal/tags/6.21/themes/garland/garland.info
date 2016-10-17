@@ -1,0 +1,14 @@
+; $Id$
+name = Garland
+description = Tableless, recolorable, multi-column, fluid width theme (default).
+version = VERSION
+core = 6.x
+engine = phptemplate
+stylesheets[all][] = style.css
+stylesheets[print][] = print.css
+
+; Information added by drupal.org packaging script on 2011-05-25
+version = "6.21"
+project = "drupal"
+datestamp = "1306354917"
+

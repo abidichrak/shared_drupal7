@@ -1,0 +1,78 @@
+<?php
+/**
+ * @file
+ * Allow multiple-parent Node Hierarchy.
+ */
+
+/**
+ * Implements hook_nodehierarchy_node_parent_form_items_alter().
+ */
+function nodehierarchy_multiparent_nodehierarchy_node_parent_form_items_wrapper_alter(&$form, &$form_state, $node) {
+  $multiparent  = variable_get('nodehierarchy_multiparent_' . $node->type, 0);
+
+  // Normalize the weights for multiple items. Also rename the first parent.
+  $weight = $id = 0;
+  foreach (element_children($form['nodehierarchy_parents']) as $id) {
+    if ($weight == 0) {
+      $form['nodehierarchy_parents'][$id]['#title'] = t('Primary parent');
+    }
+    $form['nodehierarchy_parents'][$id]['pweight']['#value'] = $weight++;
+  }
+
+  if ($multiparent) {
+    // Add blank parent fields for additional parents.
+    $extras = isset($form_state['nodehierarchy_parent_extras']) ? $form_state['nodehierarchy_parent_extras'] : 0;
+    for ($i = 0; $i < $extras; $i++) {
+      $id++;
+      $parent = _nodehierarchy_default_record();
+      $form['nodehierarchy_parents'][$id] = _nodehierarchy_node_parent_form_items($node, $parent, $id);
+      $form['nodehierarchy_parents'][$id]['#title'] = t('New parent');
+      $form['nodehierarchy_parents'][$id]['pweight']['#value'] = $weight++;
+    }
+
+    // Add a button to allow more parents to be added.
+    $form['add_more'] = array(
+      '#type' => 'submit',
+      '#value' => t('Add another parent'),
+      '#attributes' => array('class' => array('field-add-more-submit')),
+      '#limit_validation_errors' => array(),
+      '#submit' => array('nodehierarchy_multiparent_node_form_add_parent_submit'),
+      // Todo make this work via ajax to save a submit.
+      // '#ajax' => array(
+      //   'callback' => 'nodehierarchy_multiparent_node_form_add_js',
+      //   'wrapper' => $wrapper_id,
+      //   'effect' => 'fade',
+      // ),
+    );
+    
+  }
+}
+
+
+/**
+ * Submit the form after 'add parent' has been clicked. Don't save anything just rebuild the node and the new parent will show up as normal.
+ */
+function nodehierarchy_multiparent_node_form_add_parent_submit($form, &$form_state) {
+  $form_state['rebuild'] = TRUE;
+
+  // Increase the number of extra parents in the formstate.
+  $form_state['nodehierarchy_parent_extras'] = isset($form_state['nodehierarchy_parent_extras']) ? $form_state['nodehierarchy_parent_extras'] + 1 : 1;
+}
+
+/**
+ * Implements hook_nodehierarchy_node_type_settings_form().
+ */
+function nodehierarchy_multiparent_nodehierarchy_node_type_settings_form($type) {
+  module_load_include('inc', 'nodehierarchy', 'nodehierarchy.admin'); 
+  $form = array();
+  if (nodehierarchy_node_can_be_child($type)) {
+    $form['nodehierarchy_multiparent'] = array(
+      '#type' => 'checkbox',
+      '#title' => t('Multiple Parents'),
+      '#default_value' => variable_get('nodehierarchy_multiparent_' . $type, 0),
+      '#description' => t('This node type can have multiple parents.'),
+    );
+  }
+  return $form;
+}
+

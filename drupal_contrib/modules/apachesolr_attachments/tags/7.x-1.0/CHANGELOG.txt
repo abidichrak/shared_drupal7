@@ -1,0 +1,19 @@
+
+Apache Solr Attachments x.x-x.x, xxxx-xx-xx
+------------------------------
+
+Apache Solr Attachments 7.x-1.x, xxxx-xx-xx
+------------------------------
+
+Apache Solr Attachments 7.x-1.0, 2011-05-26
+------------------------------
+#1162608 by rdebieux, jpmckinney: Remove file from index if node unpublished.
+#1161802 by setvik, jpmckinney: apachesolr_attachments_update_index is never called so no files indexed.
+#1162492 by jpmckinney: Add helpful message for Windows users.
+#1156112 by jpmckinney: Add apachesolr_attachments.index.inc.
+#1156110 by jpmckinney: Catch up to apachesolr HEAD.
+#1156064 by jpmckinney: Fix typos in variable names.
+#1126668 by TomA: Cron fails because of class name change in Apache Solr Search Integration.
+#1100306 by jpmckinney: Search by filename.
+#1097086 by jpmckinney: Harmonize with new apachesolr schema.xml.
+#1034010 by jpmckinney, matason, pwolanin: Upgrade to Drupal 7 (D7).

@@ -1,0 +1,186 @@
+<?php // -*-php-*-
+// $Id: workflow_graph.module,v 1.1.2.7 2009/10/03 18:29:22 kratib Exp $
+/**
+ * @file Produces workflow graphs using Graphviz.
+ * Uses PEAR::Image_GraphViz (http://pear.php.net/package/Image_GraphViz)
+ */
+
+function workflow_graph_help($section) {
+  switch ($section) {
+  case 'admin/modules#description':
+    return t('Produces workflow graphs using Graphviz. <em>Note: Requires workflow.module and PEAR::Image_GraphViz</em>.');
+  }
+}
+
+function workflow_graph_menu() {
+  $items['admin/build/workflow/graph'] = array(
+    'title' => 'Workflow graph',
+    'access arguments'   => array('administer workflow'),
+    'type' => MENU_CALLBACK,
+    'page callback' => 'workflow_graph_definition',
+  );
+  $items['node/%node/workflow/workflow'] = array(
+    'title' => 'Workflow',
+    'type' => MENU_DEFAULT_LOCAL_TASK,
+    'access callback' => 'workflow_node_tab_access',
+    'access arguments' => array(1),
+    'page callback' => 'workflow_tab_page',
+    'page arguments' => array(1),
+    'weight' => 2,
+  );
+  $items['node/%workflow_graph/workflow/graph'] = array(
+    'title' => 'History',
+    'access callback' => 'workflow_node_tab_access',
+    'access arguments' => array(1),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 3,
+    'page callback' => 'workflow_graph_history',
+    'page arguments' => array(1),
+  );
+  return $items;
+}
+
+/**
+ * Workflow hook to allow other modules to add workflow operations.
+ */
+function workflow_graph_workflow_operations($mode, $wid, $sid=0) {
+  switch ($mode) {
+  case 'workflow':
+    return array( 
+      'workflow_graph' => array(
+        'title' => t('Graph'),
+        'href' => "admin/build/workflow/graph/$wid",
+      ),
+    );
+    break;
+  }
+}
+
+function workflow_graph_load($nid) {
+  $node = node_load($nid);
+  if ($node === FALSE) return FALSE;
+  $wid = workflow_get_workflow_for_type($node->type);
+  if (!$wid) return FALSE;
+  return $node;
+}
+
+function workflow_graph_theme() {
+  return array(
+    'workflow_graph_history' => array(
+      'arguments' => array(
+        'node' => NULL,
+      ),
+    ),
+    'workflow_graph_definition' => array(
+      'arguments' => array(
+        'wid' => NULL,
+      ),
+    ),
+  );
+}
+
+function workflow_graph_history($node) {
+  return theme('workflow_graph_history', $node);
+}
+
+function theme_workflow_graph_history($node) {
+  require_once(_graphviz_create_filepath(variable_get('graphviz_filter_pear_path', ''), 'Image/GraphViz.php'));
+
+  drupal_set_title(check_plain($node->title));
+  $G = _workflow_graph_history_generate($node);
+  return graphviz_filter_render($G);
+}
+
+function _workflow_graph_history_generate($node) {
+  $wid = workflow_get_workflow_for_type($node->type);
+  $states = workflow_get_states($wid) + array(t('(creation)'));
+  $G = new Image_GraphViz(true, array(
+    'bgcolor' => 'transparent',
+  ));
+  $result = db_query("SELECT h.*, u.name FROM {workflow_node_history} h LEFT JOIN {users} u ON h.uid = u.uid WHERE nid = %d ORDER BY stamp ASC", $node->nid);
+  $transition = 1;
+  while ($history = db_fetch_object($result)) {
+    if ($transition == 1) {
+      $G->addNode($states[$history->old_sid].'0', array('label' => $states[$history->old_sid]));
+    }
+    $G->addNode($states[$history->sid].$transition, array('label' => $states[$history->sid]));
+    $G->addEdge(array($states[$history->old_sid].($transition-1) => $states[$history->sid].$transition), array(
+      'label' => $history->name.'\l'.format_date($history->stamp).'\l'.$history->comment.'\l',
+    ));
+    $transition++;
+  }
+  return $G;
+}
+
+function workflow_graph_definition($wid) {
+  return theme('workflow_graph_definition', $wid);
+}
+
+function theme_workflow_graph_definition($wid) {
+  require_once('Image/GraphViz.php');
+
+  drupal_set_title(t('Graph workflow %name', array('%name' => workflow_get_name($wid))));
+  $G = _workflow_graph_definition_generate($wid);
+  $dot = <<<EOS
+/*
+ * @formats = png
+ * @imagemap = TRUE
+ */
+EOS;
+  $dot .= $G->fetch('dot');
+  return graphviz_filter_process($dot);
+}
+
+function _workflow_graph_definition_generate($wid) {
+  $states = workflow_get_states($wid);
+  $G = new Image_GraphViz(true, array(
+    'bgcolor' => 'transparent'
+  ));
+  foreach ($states as $sid => $state) {  
+    $G->addNode($state, array(
+      'URL' => url("admin/build/workflow/state/$wid/$sid"),
+    ));
+    $result = db_query("SELECT t.roles, t.tid, t.target_sid as state_id, s.state as state_name FROM "
+      . "{workflow_transitions} t INNER JOIN {workflow_states} s ON s.sid = "
+      . "t.target_sid WHERE t.sid = %d", $sid);
+    while ($t = db_fetch_array($result)) {
+      $G->addEdge(array($state => $t['state_name']), array(
+        'label' => _workflow_graph_format_transition_label($wid, $t['tid'], $t['roles']),
+      ));
+    }
+  }
+  return $G;
+}
+
+function _workflow_graph_format_transition_label($wid, $tid, $roles_string) {
+  $roles = explode(',', $roles_string);
+  $label = array();
+  foreach ($roles as $role) {
+    if (is_numeric($role)) {
+      $label[] = db_result(db_query("SELECT name FROM {role} WHERE rid = %d", $role));
+    } else {
+      $label[] = $role;
+    }
+  }
+  $label = implode(',\l', $label).'\l';
+
+  if (module_exists('trigger')) {
+    $types = db_query("SELECT type FROM {workflow_type_map} WHERE wid=%d", $wid);
+    while ($type = db_fetch_object($types)) {
+      $op = 'workflow-'. $type->type .'-'. $tid;
+      $aids = _trigger_get_hook_aids('workflow', $op);
+      $actions = array();
+      if (!empty($aids)) {
+        $result = db_query("SELECT description FROM {actions} WHERE aid IN ('". implode('\',\'', array_keys($aids)) ."')");
+        while ($a = db_fetch_object($result) ){
+          $actions[] = $a->description;
+        }
+      }
+      if (!empty($actions)) {
+        $label .= $type->type .' { '. implode(';\r', $actions) .' }\r';
+      }
+    }
+  }
+  return $label;
+}
+

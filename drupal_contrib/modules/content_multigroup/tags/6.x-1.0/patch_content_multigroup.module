@@ -1,0 +1,21 @@
+<?php
+// $Id: patch_content_multigroup.module,v 1.1.2.1 2009/04/22 19:42:44 doq Exp $
+
+/**
+ * @file
+ * Show content multigroup module in modules list.
+ */
+
+/**
+ * Implementation of hook_patch().
+ */
+function patch_content_multigroup_patch() {
+  return array(
+    'content_multigroup' => array(
+      'name' => t('Show content multigroup module'),
+      'description' => t('Show content multigroup module in modules list.'),
+      'file' => drupal_get_path('module', 'patch_content_multigroup') .'/content_multigroup.patch',
+      'patch arguments' => '-u -p0',
+    ),
+  );
+}

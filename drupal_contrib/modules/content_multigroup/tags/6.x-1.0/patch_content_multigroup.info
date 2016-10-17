@@ -1,0 +1,13 @@
+; $Id: patch_content_multigroup.info,v 1.1.2.1 2009/04/22 19:42:44 doq Exp $
+name = Patch: content multigroup
+description = Show content multigroup module in modules list.
+package = CCK
+dependencies[] = patchdoq
+core = 6.x
+
+; Information added by drupal.org packaging script on 2009-04-22
+version = "6.x-1.0-alpha1"
+core = "6.x"
+project = "patch_content_multigroup"
+datestamp = "1240429583"
+

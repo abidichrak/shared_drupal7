@@ -1,0 +1,11 @@
+Index: sites/all/modules/cck/modules/content_multigroup/content_multigroup.info
+===================================================================
+--- sites/all/modules/cck/modules/content_multigroup/content_multigroup.info	(revision 0)
++++ sites/all/modules/cck/modules/content_multigroup/content_multigroup.info	(revision 0)
+@@ -0,0 +1,6 @@
++name = Content Multigroup
++description = Combine multiple CCK fields into repeating field collections that work in unison. This module is experimental and not ready for production.
++dependencies[] = content
++dependencies[] = fieldgroup
++package = CCK
++core = 6.x

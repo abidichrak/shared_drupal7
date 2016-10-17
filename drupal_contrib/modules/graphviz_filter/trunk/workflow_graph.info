@@ -1,0 +1,14 @@
+; $Id: workflow_graph.info,v 1.1.2.1 2009/02/28 18:39:46 kratib Exp $
+name = Workflow Graph
+description = Produces workflow graphs using Graphviz.
+package = Workflow
+dependencies[] = workflow 
+dependencies[] = graphviz_filter
+core = 6.x
+
+; Information added by drupal.org packaging script on 2010-02-10
+version = "6.x-1.6"
+core = "6.x"
+project = "graphviz_filter"
+datestamp = "1265841009"
+

@@ -1,0 +1,13 @@
+; $Id: graphviz_formats.info,v 1.1.4.4 2009/10/03 18:29:22 kratib Exp $
+name = Graphviz Filter Formats
+description = "Additional rendering formats for Graphviz Filter."
+dependencies[] = graphviz_filter
+package = Filters
+core = 6.x
+
+; Information added by drupal.org packaging script on 2010-02-10
+version = "6.x-1.6"
+core = "6.x"
+project = "graphviz_filter"
+datestamp = "1265841009"
+

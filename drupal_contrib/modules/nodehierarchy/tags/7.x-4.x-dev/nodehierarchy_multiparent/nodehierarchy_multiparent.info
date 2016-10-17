@@ -1,0 +1,15 @@
+
+name = Node Hierarchy Multiparent
+description = Allows items to have multiple parents.
+dependencies[] = nodehierarchy
+package = "Node Hierarchy"
+core = 7.x
+files[] = nodehierarchy_multiparent.install
+files[] = nodehierarchy_multiparent.module
+
+; Information added by Drupal.org packaging script on 2015-01-22
+version = "7.x-4.x-dev"
+core = "7.x"
+project = "nodehierarchy"
+datestamp = "1421941980"
+

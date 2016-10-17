@@ -1,0 +1,300 @@
+<?php
+
+/**
+ * @file
+ *
+ * A module to make nodes hierarchical.
+ */
+
+require_once dirname(__FILE__) . '/nodehierarchy.api.inc';
+require_once dirname(__FILE__) . '/nodehierarchy.admin.inc';
+
+/**
+ * Implmentation of hook_views_api().
+ */
+function nodehierarchy_views_api() {
+  return array(
+    'api' => 2,
+    'path' => drupal_get_path('module', 'nodehierarchy') . '/includes/views',
+  );
+}
+
+/**
+ * Implements hook_migrate_api().
+ */
+function nodehierarchy_migrate_api() {
+  $api = array(
+    'api' => 2,
+    'destination handlers' => array(
+      'MigrateNodeHierarchyHandler',
+    ),
+  );
+  return $api;
+}
+
+/**
+ * Implements hook_help().
+ */
+function nodehierarchy_help($path, $arg) {
+  switch ($path) {
+    case 'admin/modules#description':
+      return t('A module to make nodes hierarchical.');
+  }
+}
+
+/**
+ * Implements hook_permission().
+ */
+function nodehierarchy_permission() {
+  return array(
+    'create child nodes' => array(
+      'title' => t('create child nodes'),
+      'description' => t('Add a node as a child of another node'),
+    ),
+    'edit all node parents' => array(
+      'title' => t('edit all node parents'),
+      'description' => t('Edit the parent of any node'),
+    ),
+    'edit own node parents' => array(
+      'title' => t('edit own node parents'),
+      'description' => t('Edit the parent of own nodes'),
+    ),
+    'administer hierarchy' => array(
+      'title' => t('administer hierarchy'),
+      'description' => t('Change the site wide settings for Node Hierarchy'),
+    ),
+    'customize nodehierarchy menus' => array(
+      'title' => t('customize nodehierarchy menus'),
+      'description' => t('Change the menu settings for nodes'),
+    ),
+    'create child of any parent' => array(
+      'title' => t('create child of any parent'),
+      'description' => t('Add a child to any other node'),
+    ),
+  );
+}
+
+/**
+ * Implements hook_menu().
+ */
+function nodehierarchy_menu() {
+  $items = array();
+  $items['admin/structure/nodehierarchy'] = array(
+    'title' => t('Node Hierarchy'),
+    'description' => t('Administer default Node Hierarchy settings.'),
+    'file' => 'nodehierarchy.admin.inc',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('nodehierarchy_admin_settings'),
+    'access arguments' => array('administer site configuration'),
+    'type' => MENU_NORMAL_ITEM,
+  );
+  $items['node/%node/children'] = array(
+    'title' => t('Children'),
+    'page callback' => 'nodehierarchy_view_children',
+    'file' => 'nodehierarchy.admin.inc',
+    'page arguments' => array(1),
+    'access callback' => 'nodehierarchy_children_tab_access',
+    'access arguments' => array(1),
+    'type' => MENU_LOCAL_TASK,
+    'weight' => 5,
+  );
+  return $items;
+}
+
+
+/**
+ * Children tab access callback.
+ */
+function nodehierarchy_children_tab_access($node) {
+  module_load_include('inc', 'nodehierarchy', 'nodehierarchy.admin'); 
+  return node_access('update', $node) && nodehierarchy_node_can_be_parent($node);
+}
+
+/**
+ * Implements hook_theme().
+ */
+function nodehierarchy_theme() {
+  return array(
+    'nodehierarchy_new_child_links' => array(
+      'variables' => array('node' => NULL),
+      'file' => 'nodehierarchy.admin.inc',
+    ),
+    'nodehierarchy_children_form' => array(
+      'render element' => 'form',
+      'file' => 'nodehierarchy.admin.inc',
+    ),
+    'nodehierarchy_parent_selector' => array(
+      'render element' => 'element',
+      'file' => 'nodehierarchy.admin.inc',
+    ),
+  );
+}
+
+/**
+ * Implements hook_content_extra_fields().
+ */
+function nodehierarchy_content_extra_fields($type_name) {
+  module_load_include('inc', 'nodehierarchy', 'nodehierarchy.admin'); 
+  _nodehierarchy_content_extra_fields($type_name);
+}
+
+/**
+ * Implementation of hooks_form_alter().
+ *
+ * So we don't see preview or delete buttons for hierarchy.
+ */
+function nodehierarchy_form_alter(&$form, &$form_state, $form_id) {
+  global $user;
+
+  $type = isset($form['type']) && isset($form['#node']) ? $form['type']['#value'] : '';
+
+  switch ($form_id) {
+    case 'node_type_form':
+      module_load_include('inc', 'nodehierarchy', 'nodehierarchy.admin');
+      nodehierarchy_alter_node_type_form($form, $form_state, $form_id);      
+      break;
+    case $type . '_node_form':
+      module_load_include('inc', 'nodehierarchy', 'nodehierarchy.admin');
+      nodehierarchy_alter_node_form($form, $form_state, $form_id);
+      break;
+    case 'node_delete_confirm':
+      module_load_include('inc', 'nodehierarchy', 'nodehierarchy.admin');
+      nodehierarchy_alter_node_delete_confirm_form($form, $form_state, $form_id);
+      break;
+  }
+}
+
+/**
+ * Get the node edit form for nodehierarchy.
+ */
+function nodehierarchy_nodehierarchy_node_form($node, $form, $form_state) {
+  module_load_include('inc', 'nodehierarchy', 'nodehierarchy.admin'); 
+  return _nodehierarchy_nodehierarchy_node_form($node, $form, $form_state);
+}
+
+
+
+/**
+ * Submit the menu_edit_item form.
+ */
+function nodehierarchy_form_menu_edit_item_submit($form, &$form_state) {
+  // Menu name and parent are in two different fields after our alter, so we glue them back together.
+  $form_state['values']['parent'] = $form_state['values']['menu_name'] . ':' . _nodehierarchy_get_node_mlid($form_state['values']['pnid'], TRUE);
+}
+
+
+/**
+ * Implements hook_node_insert().
+ */
+function nodehierarchy_node_insert($node) {
+  module_load_include('inc', 'nodehierarchy', 'nodehierarchy.admin'); 
+  nodehierarchy_insert_node($node);
+}
+
+/**
+ * Implements hook_node_update().
+ */
+function nodehierarchy_node_update($node) {
+  module_load_include('inc', 'nodehierarchy', 'nodehierarchy.admin'); 
+  nodehierarchy_update_node($node);
+}
+
+/**
+ * Implements hook_node_prepare().
+ */
+function nodehierarchy_node_prepare($node) {
+  module_load_include('inc', 'nodehierarchy', 'nodehierarchy.admin'); 
+  return nodehierarchy_prepare_node($node);
+}
+
+/**
+ * Implements hook_node_load().
+ */
+function nodehierarchy_node_load($nodes) {
+  foreach ($nodes as $nid => $node) {
+    $nid = empty($node->nid) ? null : $node->nid;
+    $node->nodehierarchy_parents = nodehierarchy_get_node_parents($nid);
+  }
+}
+
+/**
+ * Implements hook_node_delete().
+ */
+function nodehierarchy_node_delete($node) {
+  module_load_include('inc', 'nodehierarchy', 'nodehierarchy.admin');
+  nodehierarchy_delete_node($node);
+}
+
+/**
+ * Implements hook_node_view().
+ */
+function nodehierarchy_node_view($node, $view_mode = 'full') {
+  if ($view_mode == 'full') {
+    nodehierarchy_set_breadcrumbs($node);
+  }
+}
+
+/**
+ * Implements hook_node_submit().
+ *
+ * @see nodehierarchy_node_form_alter()
+ */
+function nodehierarchy_node_submit($node, $form, $form_state) {
+}
+
+/**
+ * Implements hook_nodehierarchy_default_parents().
+ * 
+ * Set the default parents for a node.
+ */
+function nodehierarchy_nodehierarchy_default_parents($node) {
+  module_load_include('inc', 'nodehierarchy', 'nodehierarchy.admin');
+  _nodehierarchy_nodehierarchy_default_parents($node);
+}
+
+/**
+ * Set the breadcrumbs and active menu to reflect the position of the given
+ * node in the site hierarchy.
+ *
+ * @param $node
+ *   The current node
+ * @param $add_node
+ *   Whether we want the current node in the breadcrumb (eg: for the children tab)
+ */
+function nodehierarchy_set_breadcrumbs($node, $add_node = FALSE) {
+  // Place the given node.
+  $breadcrumb = array();
+
+  // Get all the possible breadcrumbs for the node.
+  $nid = empty($node->nid) ? null : $node->nid;
+  $breadcrumb = nodehierarchy_get_breadcrumb($nid);
+
+  // Remove the node itself if it's not needed (we would want it for the children tab for example).
+  if ($add_node) {
+    $uri = entity_uri('node', $node);
+    $breadcrumb[] = l($node->title, $uri['path'], $uri['options']);
+  }
+
+  // Stick the home link on the top of the breadcrumb.
+  array_unshift($breadcrumb, l(t('Home'), '<front>'));
+
+  drupal_set_breadcrumb($breadcrumb);
+}
+
+/**
+ * Get the breadcrumbs for the given node.
+ *
+ * There could be multiple breadcrumbs because there could be multiple parents.
+ */
+function nodehierarchy_get_breadcrumb($nid) {
+  $breadcrumb = array();
+
+  // Retrieve the descendent list of menu links and convert them to a breadcrumb trail.
+  $trail = nodehierarchy_get_node_primary_ancestor_nodes($nid);
+  foreach ($trail as $node) {
+    $uri = entity_uri('node', $node);
+    $breadcrumb[] = l($node->title, $uri['path'], $uri['options']);
+  }
+  return $breadcrumb;
+}
+

@@ -1,0 +1,325 @@
+<?php
+
+/**
+ * @file
+ * Provides a file attachment search implementation for use with the Apache Solr module
+ */
+
+define('EXTRACTING_SERVLET', 'extract/tika');
+
+/**
+ * Implements hook_menu().
+ */
+function apachesolr_attachments_menu() {
+  $items = array();
+  $items['admin/config/search/apachesolr/attachments'] = array(
+    'title' => 'Attachments',
+    'description' => 'Administer Apache Solr Attachments.',
+    'page callback' => 'apachesolr_attachments_admin_page',
+    'access arguments' => array('administer search'),
+    'file' => 'apachesolr_attachments.admin.inc',
+    'type' => MENU_LOCAL_TASK,
+  );
+  $items['admin/config/search/apachesolr/attachments/confirm/reindex'] = array(
+    'title' => 'Reindex all files',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('apachesolr_attachments_confirm', 6),
+    'access arguments' => array('administer search'),
+    'file' => 'apachesolr_attachments.admin.inc',
+    'type' => MENU_CALLBACK,
+  );
+  $items['admin/config/search/apachesolr/attachments/confirm/delete'] = array(
+    'title' => 'Delete and reindex all files',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('apachesolr_attachments_confirm', 6),
+    'access arguments' => array('administer search'),
+    'file' => 'apachesolr_attachments.admin.inc',
+    'type' => MENU_CALLBACK,
+  );
+  $items['admin/config/search/apachesolr/attachments/confirm/clear-cache'] = array(
+    'title' => 'Delete the local cache of file text',
+    'page callback' => 'drupal_get_form',
+    'page arguments' => array('apachesolr_attachments_confirm', 6),
+    'access arguments' => array('administer search'),
+    'file' => 'apachesolr_attachments.admin.inc',
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+/**
+ * Implements hook_help().
+ *
+ * @see apachesolr_search_help()
+ */
+function apachesolr_attachments_help($section) {
+  switch ($section) {
+    case 'admin/config/search/apachesolr/index':
+      if (apachesolr_environment_variable_get(apachesolr_default_environment(), 'apachesolr_read_only', APACHESOLR_READ_WRITE) == APACHESOLR_READ_ONLY) {
+        return t('Operating in read-only mode; updates are disabled.');
+      }
+      $remaining = 0;
+      $total = 0;
+      // Collect the stats
+      $status = apachesolr_index_status('apachesolr_attachments');
+      $remaining += $status['remaining'];
+      $total += $status['total'];
+
+      // This message is prepended to the message produced by apachesolr_search_help().
+      return t('<p>There @items remaining to be examined for attachments out of @total total.</p>', array(
+        '@items' => format_plural($remaining, t('is 1 item'), t('are @count items')),
+        '@total' => $total,
+      ));
+  }
+}
+
+/**
+ * Implements hook_search_info().
+ *
+ * @see apachesolr_search_search_info()
+ */
+function apachesolr_attachments_search_info() {
+  // We dont want a search tab, so set to same as apachesolr_search.
+  return array(
+    'title' => 'Site',
+    'path' => 'site',
+    'conditions_callback' => 'apachesolr_search_conditions',
+  );
+}
+
+/**
+ * Implements hook_search_reset().
+ *
+ * @see apachesolr_search_search_reset()
+ */
+function apachesolr_attachments_search_reset() {
+  apachesolr_clear_last_index('apachesolr_attachments');
+}
+
+/**
+ * Implements hook_search_status().
+ *
+ * @see apachesolr_search_search_status()
+ */
+function apachesolr_attachments_search_status() {
+  // TODO: Figure out a way to know how many actual files are left to update.
+  return apachesolr_index_status('apachesolr_attachments');
+}
+
+/**
+ * Implements hook_search_execute().
+ */
+function apachesolr_attachments_search_execute($keys = NULL, $conditions = NULL) {
+  // We dont want a search tab. Don't do anything.
+  return array();
+}
+
+/**
+ * Implements hook_apachesolr_types_exclude().
+ */
+function apachesolr_attachments_apachesolr_types_exclude($namespace) {
+  if ($namespace == 'apachesolr_attachments' && variable_get('apachesolr_attachments_exclude_types', 1)) {
+    return apachesolr_search_apachesolr_types_exclude('apachesolr_search');
+  }
+}
+
+/**
+ * Implements hook_apachesolr_document_handlers().
+ *
+ * @see apachesolr_search_apachesolr_document_handlers()
+ */
+function apachesolr_attachments_apachesolr_document_handlers($type, $namespace) {
+  if ($type == 'node' && $namespace == 'apachesolr_attachments') {
+    return array('apachesolr_attachments_add_documents');
+  }
+}
+
+/**
+ * Implements hook_update_index().
+ *
+ * Search content types and add any field that is a file type that we know how
+ * to parse and any uploaded file attachments.
+ *
+ * @see apachesolr_search_cron()
+ */
+function apachesolr_attachments_update_index() {
+  if (variable_get('apachesolr_attachments_extract_using', 'tika') == 'solr' || variable_get('apachesolr_attachments_tika_path', '')) {
+    module_load_include('inc', 'apachesolr_attachments', 'apachesolr_attachments.index');
+    $start = REQUEST_TIME;
+    $cron_try = variable_get('apachesolr_attachments_cron_try', 20);
+    $cron_limit = variable_get('apachesolr_attachments_cron_limit', 100);
+    $cron_time_limit = variable_get('apachesolr_attachments_cron_time_limit', 15);
+    $num_tried = 0;
+    do {
+      $rows = apachesolr_get_nodes_to_index('apachesolr_attachments', $cron_try);
+      // Calls apachesolr_attachments_apachesolr_document_handlers() and
+      // ultimately apachesolr_attachments_add_documents().
+      $success = apachesolr_index_nodes($rows, 'apachesolr_attachments');
+      $num_tried += $cron_try;
+    } while ($success && ($num_tried < $cron_limit) && (REQUEST_TIME - $start < $cron_time_limit));
+  }
+}
+
+/**
+ * Implements hook_node_update().
+ *
+ * If node is unpublished, mark all associated attachments as removed.
+ *
+ * @see apachesolr_node_delete()
+ */
+function apachesolr_attachments_node_update($node) {
+  if (!$node->status) {
+    apachesolr_attachments_node_delete($node);
+  }
+}
+
+/**
+ * Implements hook_node_delete().
+ *
+ * Mark all associated attachments as removed.
+ *
+ * @see apachesolr_node_delete()
+ */
+function apachesolr_attachments_node_delete($node) {
+  // Mark attachments for later deletion if the query fails.
+  if (apachesolr_attachments_remove_attachments_from_index($node->nid)) {
+    db_delete('apachesolr_attachments_files')->condition('nid', $node->nid)->execute();
+  }
+  else {
+    db_update('apachesolr_attachments_files')->fields(array('removed' => 1))->condition('nid', $node->nid)->execute();
+  }
+}
+
+/**
+ * For a particular node ID, remove all file attachments from the Solr index.
+ *
+ * @see apachesolr_delete_node_from_index()
+ */
+function apachesolr_attachments_remove_attachments_from_index($nid) {
+  static $failed = FALSE;
+  if ($failed) {
+    return FALSE;
+  }
+  try {
+    $solr = apachesolr_get_solr();
+    $solr->deleteByQuery("is_nid:$nid AND entity_type:file AND hash:" . apachesolr_site_hash());
+    $solr->commit();
+    return TRUE;
+  }
+  catch (Exception $e) {
+    watchdog('Apache Solr Attachments', nl2br(check_plain($e->getMessage())), NULL, WATCHDOG_ERROR);
+    // Don't keep trying queries if they are failing.
+    $failed = TRUE;
+    return FALSE;
+  }
+}
+
+/**
+ * Implements hook_cron().
+ *
+ * Delete all removed attachments from the Solr store.
+ *
+ * @see apachesolr_nodeapi_mass_delete()
+ */
+function apachesolr_attachments_cron() {
+  $files = db_query("SELECT fid, nid FROM {apachesolr_attachments_files} WHERE removed = :removed", array(':removed' => 1));
+
+  $ids = array();
+  $fids = array();
+  foreach ($files as $file) {
+    $ids[] = apachesolr_document_id($file->fid . '-' . $file->nid, 'file');
+    $fids[] = $file->fid;
+  }
+  if ($ids) {
+    try {
+      $solr = apachesolr_get_solr();
+      $solr->deleteByMultipleIds($ids);
+      $solr->commit();
+      // There was no exception, so update the table.
+      db_delete('apachesolr_attachments_files')->condition('fid', $fids, 'IN')->execute();
+    }
+    catch (Exception $e) {
+      watchdog('Apache Solr Attachments', nl2br(check_plain($e->getMessage())) . ' in apachesolr_attachments_cron', NULL, WATCHDOG_ERROR);
+    }
+  }
+}
+
+/**
+ * Implements hook_apachesolr_query_alter().
+ */
+function apachesolr_attachments_apachesolr_query_alter(DrupalSolrQueryInterface $query) {
+  if ($query->getName() == 'apachesolr') {
+    // Fetch the extra file data on searches.
+    $query->addParam('fl', array('is_nid', 'ss_filemime', 'ss_file_node_title', 'ss_file_node_url'));
+  }
+  elseif ($query->getName() == 'apachesolr_mlt') {
+    // Exclude files from MLT results.
+    $query->addFilter('entity_type', 'file', TRUE);
+  }
+}
+
+/**
+ * Implements hook_entity_info_alter().
+ *
+ * @see apachesolr_search_entity_info_alter()
+ */
+function apachesolr_attachments_entity_info_alter(&$entity_info) {
+  $entity_info['file']['apachesolr']['result callback'] = 'apachesolr_attachments_file_result';
+}
+
+/**
+ * Callback function for file search results.
+ *
+ * @param stdClass $doc
+ *   The result document from Apache Solr.
+ * @param array $result
+ *   The result array for this record to which to add.
+ */
+function apachesolr_attachments_file_result($doc, &$result, &$extra) {
+  $doc->uid = $doc->is_uid;
+  $result += array(
+    'type' => t('File attachment'),
+    'user' => theme('username', array('account' => $doc)),
+    'date' => isset($doc->created) ? $doc->created : 0,
+    'node' => $doc,
+    'file' => $doc,
+    'uid' => $doc->is_uid,
+  );
+}
+
+/**
+ * Implements hook_theme().
+ */
+function apachesolr_attachments_theme() {
+  return array(
+    'apachesolr_search_snippets__file' => array(
+      'variables' => array('doc' => NULL, 'snippets' => array()),
+    ),
+  );
+}
+
+function theme_apachesolr_search_snippets__file($vars) {
+  $doc = $vars['doc'];
+  $snippets = $vars['snippets'];
+
+  $node_link = t('<em>attached to:</em> !node_link', array('!node_link' => l($doc->ss_file_node_title, 'node/' . $doc->is_nid)));
+  if (module_exists('file')) {
+    $file_type = t('!icon @filemime', array('@filemime' => $doc->ss_filemime, '!icon' => theme('file_icon', array('file' => (object) array('filemime' => $doc->ss_filemime)))));
+  }
+  else {
+    $file_type = t('@filemime', array('@filemime' => $doc->ss_filemime));
+  }
+
+  return implode(' ... ', $snippets) . '<span>' . $file_type . ' ' . $node_link . '</span>';
+}
+
+/**
+ * Provides a default list of filename extensions to exclude from the index.
+ *
+ * @return
+ *   An array of file extensions.
+ */
+function apachesolr_attachments_default_excluded() {
+  $default = array('aif', 'art', 'avi', 'bmp', 'gif', 'ico', 'jpg', 'mov', 'mp3', 'mp4', 'mpg', 'oga', 'ogv', 'png', 'psd', 'ra', 'ram', 'rgb', 'tif');
+  return $default;
+}

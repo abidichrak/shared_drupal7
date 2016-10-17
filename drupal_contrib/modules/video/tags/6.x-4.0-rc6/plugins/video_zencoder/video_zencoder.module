@@ -1,0 +1,146 @@
+<?php
+// $Id: video_zencoder.module,v 1.1.2.7 2010/07/23 02:11:13 heshanmw Exp $
+/**
+ * @file
+ * Provides wrapper functions for the s3 amazon webservices.
+ */
+
+/*
+ * Implementation of hook_perm().
+*/
+function video_zencoder_perm() {
+  return array('administer zencoder');
+}
+/*
+ * Implmentation of hook_help().
+*/
+function video_zencoder_help($path, $arg) {
+  switch($path) {
+    case 'admin/settings/video/amazon_s3':
+      $output = t('Use Amazon Simple Storage Service (Amazon S3) to store your video files.  This free\'s up bandwidth from your site, providing a faster experience for your users.  Simply enable this module and enter your authentication details and your done!');
+      return $output;
+  }
+}
+
+/*
+ * Implementation of hook_menu().
+*/
+function video_zencoder_menu() {
+  $items = array();
+  $items['admin/settings/video/zencoder'] = array(
+          'title' => 'Zencoder',
+          'description' => 'Configure your Zencoder API settings.',
+          'page callback' => 'drupal_get_form',
+          'page arguments' => array('video_zencoder_admin_settings'),
+          'access arguments' => array('administer site configuration'),
+          'file' => 'video_zencoder.admin.inc',
+          'type' => MENU_LOCAL_TASK,
+          'weight' => 10,
+  );
+  return $items;
+}
+
+/*
+ * Implementation of hook_cron().
+*/
+function video_zencoder_cron() {
+  module_load_include('inc', 'video_zencoder', '/includes/zencoder');
+  $zc = new video_zencoder_api;
+//  $s3->connect();
+//  // Lets run our queue.
+  $zc->queue();
+}
+
+/**
+ * Implementation of hook_video_delete.
+ * we can use hook_file_delete()
+ */
+function video_zencoder_video_delete($file) {
+  module_load_include('inc', 'video_zencoder', '/includes/zencoder');
+  $zc = new video_zencoder_api;
+  // Lets run delete.
+  $zc->delete($file->fid);
+}
+
+/*
+ * Implementation of hook_video_update.
+ * Submit hanlder to update our s3 table to include the node id.
+*/
+function video_zencoder_video_update($form, &$form_state) {
+  //lets update our video rending table to include the node id created
+  if (isset($form_state['nid']) && isset($form_state['values']['video_id']) && is_array($form_state['values']['video_id'])) {
+    foreach($form_state['values']['video_id'] as $fid) {
+      //lets update our table to include the nid
+      db_query("UPDATE {video_zencoder} SET nid=%d WHERE fid=%d", $form_state['nid'], $fid);
+    }
+  }
+}
+
+/**
+ * Implementing hook_video_insert
+ * @param <type> $element
+ * @param <type> $form_state
+ */
+function video_zencoder_video_insert(&$element, &$form_state) {
+  $file = $element['#value'];
+  //we need to check if this fid has already been added to the database AND that there is in fact a fid
+  if (is_array($file) && isset($file['fid']) && !empty($file['fid'])) {
+    module_load_include('inc', 'video_zencoder', '/includes/zencoder');
+    $zc = new video_zencoder_api;
+    // Lets verify that we haven't added this video already.  Multiple validation fails will cause this to be ran more than once
+    if(!$video = $zc->verify($file['fid'])) {
+      // Video has not been added to the queue yet so lets add it.
+      $zc->insert($file['fid'], $jobid);
+      drupal_set_message(t('Video submission queued for transfer to your Zencoder Transcoding server. Will be there shortly.'));
+    }
+  }
+}
+
+/**
+ * Implementing hook_video_load
+ * @param <type> $element
+ * @param <type> $form_state
+ */
+function video_zencoder_video_load(&$video) {
+  module_load_include('inc', 'video_zencoder', '/includes/zencoder');
+  $zc = new video_zencoder_api;
+  if($zencoder = $zc->get($video->fid)) {
+    // Fix our filepath
+    $video->filepath = $zencoder->filepath;
+    $video->url = $zencoder->filepath;
+    $video->extension = pathinfo($zencoder->filepath, PATHINFO_EXTENSION);
+  }
+
+  /**
+   * Implementation of hook_mail().
+   */
+  function video_zencoder_mail($key, &$message, $params) {
+    $language = $message['language'];
+    $message['subject'] .= 'Zencoder Registration Details for Drupal Video';
+    $message['body'][] = '<div class="ii gt" id=":wv">Welcome to Zencoder for Drupal<br>
+-------------------<br>
+<br>
+Your account has been created and is ready to start processing.<br>
+<br>
+Your account details are as below.<br>
+<br>
+API Key : '.$params['api_key'].'<br>
+Password : '.$params['password'].'<br>
+<br>
+Login URL:<br>
+<a target="_blank" href="https://app.zencoder.com/login">https://app.zencoder.com/login</a><br>
+<br>
+You can get help at the following places:<br>
+<br>
+* Our chat room at <a target="_blank" href="http://zencoder.com/chat">http://zencoder.com/chat</a><br>
+* Customer forums at <a target="_blank" href="https://help.zencoder.com/forums">https://help.zencoder.com/<wbr></wbr>forums</a><br>
+* The help desk at <a target="_blank" href="https://help.zencoder.com/tickets/new">https://help.zencoder.com/<wbr></wbr>tickets/new</a><br>
+<br>
+We\'d love to hear from you. Let us know how we can help. Thanks!<br>
+<br>
+Thanks,<br>
+<font color="#888888">Zencoder for Drupal Support<br>
+</font></div>';
+  }
+
+}

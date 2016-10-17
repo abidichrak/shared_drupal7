@@ -1,0 +1,59 @@
+#
+# French translation of Drupal (general)
+#
+msgid ""
+msgstr ""
+"Project-Id-Version: 1.0\n"
+"POT-Creation-Date: 2010-08-09 15:20-0000\n"
+"PO-Revision-Date: 2010-08-09 15:20-0000\n"
+"Last-Translator: Tony Dubreil <tdubreil@jouve.fr>\n"
+"Language-Team: \n"
+"MIME-Version: 1.0\n"
+"Content-Type: text/plain; charset=UTF-8\n"
+"Content-Transfer-Encoding: 8bit\n"
+"Plural-Forms: nplurals=2; plural=(n>1);\n"
+
+#: excerpt.module:38
+#: excerpt.info:0
+msgid "Excerpt"
+msgstr "Extrait"
+
+#: excerpt.module:43;57
+msgid "Teaser"
+msgstr "Introdcution"
+
+#: excerpt.module:45
+msgid "Auto-generated"
+msgstr "Auto-généré"
+
+#: excerpt.module:45
+msgid "Manual excerpt"
+msgstr "Extrait manuel"
+
+#: excerpt.module:46
+msgid "Choose whether the node teaser must be generated automatically or manually entered by the author."
+msgstr "Choisir si l'introduction du noeud doit être générée automatiquement ou manuellement par l'auteur"
+
+#: excerpt.module:50
+msgid "Weight of Teaser field"
+msgstr "Position du champ introduction"
+
+#: excerpt.module:62
+msgid "Enter an excerpt for this item. It will be shown on listing pages along with a <em>read more</em> link which leads to the full view. Leave empty to auto-generate one from the body."
+msgstr "Entrer un extrait pour cet item. Il sera affiché dans les pages de liste suivi d'un lien <em>en lire plus</em> qui mène à la page complète. Laissez vide pour générer automatiquement à partir du corps de texte."
+
+#: excerpt.info:0
+msgid "Allows users to manually control the teaser for a node."
+msgstr "Autorisé les utilisateurs à rédigé manuellement l'introduction d'un noeud"
+
+#~ msgid ""
+#~ "<p>If you want users to be able to enter separate excerpts for nodes, "
+#~ "check the <em>excerpt</em> box in the appropriate column.</p>"
+#~ msgstr ""
+#~ "<p>Se pretende que os utilizadores possam inserir resumos separados nos "
+#~ "nós, marque a caixa <em>resumo</em> na coluna apropriada.</p>"
+#~ msgid "Teasers"
+#~ msgstr "Resumos"
+#~ msgid "excerpt"
+#~ msgstr "resumo"
+

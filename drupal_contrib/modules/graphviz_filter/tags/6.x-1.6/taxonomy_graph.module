@@ -1,0 +1,87 @@
+<?php
+// $Id: taxonomy_graph.module,v 1.1.2.3 2010/02/10 22:25:05 kratib Exp $
+
+function taxonomy_graph_form_alter(&$form, $form_state, $form_id) {
+  if ($form_id == 'taxonomy_overview_vocabularies') {
+    foreach (taxonomy_get_vocabularies() as $vocabulary) {
+      $form[$vocabulary->vid]['graph'] = array('#value' => l(t('graph'), "admin/content/taxonomy/$vocabulary->vid/graph"));
+    }
+    $form['#theme'] = array('taxonomy_graph_overview_vocabularies');
+  }
+}
+
+function theme_taxonomy_graph_overview_vocabularies($form) {
+  $rows = array();
+  foreach (element_children($form) as $key) {
+    if (isset($form[$key]['name'])) {
+      $vocabulary = &$form[$key];
+
+      $row = array();
+      $row[] = drupal_render($vocabulary['name']);
+      $row[] = drupal_render($vocabulary['types']);
+      if (isset($vocabulary['weight'])) {
+        $vocabulary['weight']['#attributes']['class'] = 'vocabulary-weight';
+        $row[] = drupal_render($vocabulary['weight']);
+      }
+      $row[] = drupal_render($vocabulary['edit']);
+      $row[] = drupal_render($vocabulary['list']);
+      $row[] = drupal_render($vocabulary['add']);
+      $row[] = drupal_render($vocabulary['graph']);
+      $rows[] = array('data' => $row, 'class' => 'draggable');
+    }
+  }
+  if (empty($rows)) {
+    $rows[] = array(array('data' => t('No vocabularies available.'), 'colspan' => '5'));
+  }
+
+  $header = array(t('Name'), t('Type'));
+  if (isset($form['submit'])) {
+    $header[] = t('Weight');
+    drupal_add_tabledrag('taxonomy', 'order', 'sibling', 'vocabulary-weight');
+  }
+  $header[] = array('data' => t('Operations'), 'colspan' => '4');
+  return theme('table', $header, $rows, array('id' => 'taxonomy')) . drupal_render($form);
+}
+
+function taxonomy_graph_theme() {
+  return array(
+    'taxonomy_graph_overview_vocabularies' => array(
+      'arguments' => array('form' => NULL),
+    ),
+  );
+}
+
+function taxonomy_graph_menu() {
+  $items['admin/content/taxonomy/%taxonomy_vocabulary/graph'] = array(
+    'title' => 'Graph',
+    'page callback' => 'taxonomy_graph_page',
+    'page arguments' => array(3),
+    'access arguments' => array('administer taxonomy'),
+    'type' => MENU_LOCAL_TASK,
+    'parent' => 'admin/content/taxonomy/%taxonomy_vocabulary',
+  );
+  return $items;
+}
+
+function taxonomy_graph_page($vocabulary) {
+  drupal_set_title(t('Graph %name', array('%name' => $vocabulary->name)));
+
+  require_once(_graphviz_create_filepath(variable_get('graphviz_filter_pear_path', ''), 'Image/GraphViz.php'));
+  $G = new Image_Graphviz(TRUE);
+
+  $tree = taxonomy_get_tree($vocabulary->vid);
+  foreach ($tree as $term) {
+    $tidtree[$term->tid] = $term;
+  }
+  $G->addNode($vocabulary->name, array('URL' => url('admin/content/taxonomy/edit/vocabulary/' . $vocabulary->vid)));
+  if (!empty($tidtree)) foreach ($tidtree as $term) {
+    $G->addNode($term->name, array('URL' => url('admin/content/taxonomy/edit/term/' . $term->tid)));
+    foreach ($term->parents as $parentid) {
+      if ($parentid == 0) $G->addEdge(array($vocabulary->name => $term->name));
+      else $G->addEdge(array($tidtree[$parentid]->name => $term->name));
+    }
+  }
+
+  return graphviz_filter_render($G);
+}
+

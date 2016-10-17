@@ -1,0 +1,27 @@
+name = Video
+description = Upload and manage video content with Drupal
+package = Media
+core = 7.x
+dependencies[] = file
+dependencies[] = image
+
+files[] = video.utility.inc
+files[] = includes/Conversion.inc
+files[] = includes/Metadata.inc
+files[] = includes/Preset.inc
+files[] = includes/Transcoder.inc
+files[] = includes/VideoHelper.inc
+files[] = includes/TranscoderFactory.inc
+files[] = transcoders/TranscoderAbstractionFactoryFfmpeg.inc
+files[] = transcoders/TranscoderAbstractionFactoryZencoder.inc
+files[] = views/video_handler_field_video_duration.inc
+files[] = tests/TranscoderAbstractionFactoryFfmpeg.test
+files[] = tests/TranscoderAbstractionFactoryZencoder.test
+files[] = libraries/phpvideotoolkit/phpvideotoolkit.php5.php
+files[] = tests/VideoUtility.test
+; Information added by drupal.org packaging script on 2012-05-16
+version = "7.x-2.6"
+core = "7.x"
+project = "video"
+datestamp = "1337203623"
+

@@ -1,0 +1,204 @@
+<?php
+
+/**
+ * @file
+ * Alternative parent selector widgets for Node Hierarchy.
+ */
+
+/**
+ * Implements hook_menu().
+ */
+function nodehierarchy_widgets_menu() {
+  $items = array();
+
+  $items['nodehierarchy/autocomplete/parent'] = array(
+    'title' => 'Autocomplete',
+    'access arguments' => array('access content'),
+    'page callback' => 'nodehierarchy_widgets_autocomplete_parent',
+    'type' => MENU_CALLBACK,
+  );
+  return $items;
+}
+
+
+/**
+ * Implements hook_nodehierarchy_get_parent_selector().
+ */
+function nodehierarchy_widgets_nodehierarchy_get_parent_selector($child_type, $pnid, $exclude = NULL) {
+  if (variable_get('nodehierarchy_widgets_parent_selector', 'autocomplete') == 'autocomplete') {
+    drupal_add_css(drupal_get_path('module', 'nodehierarchy_widgets') . '/nodehierarchy_widgets.css');
+    $out = array(
+      '#type' => 'textfield',
+      '#autocomplete_path' => 'nodehierarchy/autocomplete/parent/' . $child_type . '/' . (int)$exclude,
+      '#child_type' => $child_type,
+      '#exclude' => $exclude,
+      '#description' => 'Enter the title of the parent node.',
+      '#element_validate' => array('_nodehierarchy_widgets_autocomplete_parent_validate'),
+      '#default_value' => _nodehierarchy_widgets_autocomplete_parent_value($pnid),
+      '#attributes' => array(
+        'class' => array('nodehierarchy-parent-autocomplete'),
+      ),
+    );
+    return array($out);
+  }
+}
+
+/**
+ * Page callback for autocomplete.
+ */
+function nodehierarchy_widgets_autocomplete_parent($child_type = NULL, $exclude = NULL, $string = NULL) {
+  $nodes = array();
+  $length = strlen($string);
+
+  $options = _nodehierarchy_widgets_parent_autocomplete_options($child_type, $exclude, $string);
+  $limit = 100;
+  foreach ($options as $key => $item) {
+    if ($limit-- > 0) {
+      $start = (empty($string) ? FALSE : strpos(strtolower($item['title']), strtolower($string)));
+      if ($start !== FALSE) {
+        $rendered = $item['title'];
+        $rendered = substr_replace($rendered, '<u>', $start, 0);
+        $rendered = substr_replace($rendered, '</u>', $start + $length + 3, 0);
+        $trail = _nodehierarchy_widgets_autocomplete_parent_heirarchy_trail($item);
+        if (count($trail) > 1) {
+          $rendered .= ' <span class="nodehierarchy-autocomplete-trail">' . implode(' &#9656; ', $trail) . '</span>';
+        }
+        $nodes[$item['title'] . ' [nid:' . $item['nid'] . ']'] = $rendered;
+      }
+    }
+  }
+  drupal_json_output($nodes);
+}
+
+/**
+ * Get the trail of ancestors to display in the autocomlete results.
+ */
+function _nodehierarchy_widgets_autocomplete_parent_heirarchy_trail($item) {
+  $out = array();
+  $trail = nodehierarchy_get_node_primary_ancestor_nodes($item['nid']);
+  $out = array();
+  foreach ($trail as $node) {
+    $out[] = $node->title;
+  }
+  return $out;
+}
+
+/**
+ * Return a list of menu items that are valid possible parents for the given node.
+ */
+function _nodehierarchy_widgets_parent_autocomplete_options($child_type, $exclude = NULL, $string = NULL) {
+  $out = array();
+
+  // Get all the possible parents.
+  $types = nodehierarchy_get_allowed_parent_types($child_type);
+
+  // Get the items with menu links.
+  $items = $mlids = $tree = array();
+  if ($types) {
+    $query = db_select('node', 'n')
+              ->fields('n', array('nid', 'type', 'title', 'uid', 'status'))
+              ->condition('n.type', $types, 'IN')
+              ->condition('n.title', '%' . db_like($string) . '%', 'LIKE');
+    if ($exclude) {
+      $query->condition('n.nid', (array)$exclude, 'NOT IN');
+    }
+    $result = $query->execute();
+
+    foreach ($result as $item) {
+      if (user_access('create child of any parent') || node_access('update', $item)) {
+        $out[$item->nid] = array(
+          'title' => $item->title,
+          'nid' => $item->nid,
+        );
+      }
+    }
+  }
+
+  return $out;
+}
+
+/**
+ * Return a list of menu items that are valid possible parents for the given node.
+ */
+function _nodehierarchy_widgets_is_invalid_parent($parent_nid, $child_nid, $child_type) {
+  $parent = node_load($parent_nid);
+
+  // Check for a valid parent type.
+  if (!$parent) {
+    return t('The specified parent cannot be found');
+  }
+
+  // Check for a valid parent type.
+  $types = nodehierarchy_get_allowed_parent_types($child_type);
+  if (!in_array($parent->type, $types)) {
+    return t('%title cannot be a parent of this node because %type is not an allowed parent node type.', array('%title' => $parent->title, '%type' => node_type_get_name($parent->type)));
+  }
+
+  // Check permissions
+  if (!user_access('create child of any parent') && !node_access('update', $parent)) {
+    return t('%title cannot be a parent of this node because you are not allowed to edit this parent.', array('%title' => $parent->title));
+  }
+
+  // Check that the parent is not a child of itself
+  if ($parent_nid == $child_nid) {
+    return t('%title cannot be a parent of itself.', array('%title' => $parent->title));
+  }
+
+  // Check that the parent is not a descendant of the given node.
+  $ancestors = nodehierarchy_get_node_ancestor_nids($parent_nid);
+  if (in_array($child_nid, $ancestors)) {
+    return t('%title cannot be a parent of this node it is a descendant of the node.', array('%title' => $parent->title));
+  }
+
+  return FALSE;
+}
+
+/**
+ * Get the default display value for a node hierarchy autocomplete.
+ */
+function _nodehierarchy_widgets_autocomplete_parent_value($pnid) {
+  if ($pnid && $item = node_load($pnid)) {
+    return $item->title . ' [nid:' . $item->nid . ']';
+  }
+}
+
+/**
+ * Validate a node hierarchy autocomplete in the format 'Tile [nid:xx]' or '[nid:xx]' or 'Title'.
+ */
+function _nodehierarchy_widgets_autocomplete_parent_validate($element, &$form_state) {
+  $child_type = $element['#child_type'];
+  $exclude    = $element['#exclude'];
+  $value      = $element['#value'];
+
+  $nid = NULL;
+  if (!empty($value)) {
+    preg_match('/^(?:\s*|(.*) )?\[\s*nid\s*:\s*(\d+)\s*\]$/', $value, $matches);
+    if (!empty($matches)) {
+      // Explicit [nid:n].
+      list(, $title, $nid) = $matches;
+      if (isset($form_state['values']['nid'])) {
+        if ($err = _nodehierarchy_widgets_is_invalid_parent($nid, $form_state['values']['nid'], $form_state['values']['type'])) {
+          form_error($element, $err);
+        }
+      }
+    }
+    else {
+      // No explicit nid.
+      $options = _nodehierarchy_widgets_parent_autocomplete_options($form_state['values']['type'], $form_state['values']['nid'], trim($value));
+      if (empty($options)) {
+        form_error($element, t('There are no available parents called \'%name\'', array('%name' => $value)));
+      }
+      else {
+        $key = key($options);
+        if ($err = _nodehierarchy_widgets_is_invalid_parent($options[$key]['nid'], $form_state['values']['nid'], $form_state['values']['type'])) {
+          form_error($element, $err);
+        }
+        else {
+          $nid = $key;
+        }
+      }
+    }
+  }
+  form_set_value($element, $nid, $form_state);
+}
+

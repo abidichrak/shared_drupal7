@@ -1,0 +1,16 @@
+
+name = Node Hierarchy Children Menu
+description = Allows admins to create menu items based on Node Hierarchy.
+dependencies[] = nodehierarchy
+dependencies[] = menu
+package = "Node Hierarchy"
+core = 7.x
+files[] = nodehierarchy_menu.install
+files[] = nodehierarchy_menu.module
+
+; Information added by Drupal.org packaging script on 2015-01-22
+version = "7.x-4.x-dev"
+core = "7.x"
+project = "nodehierarchy"
+datestamp = "1421941980"
+

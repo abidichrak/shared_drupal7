@@ -1,0 +1,14 @@
+; $Id: cck_schema.info,v 1.1.2.2.2.1 2008/07/25 11:29:34 kratib Exp $
+name = CCK Schema
+description = Produces a pseudo-UML class diagram of the content types using Graphviz.
+dependencies[] = content 
+dependencies[] = graphviz_filter
+package = CCK
+core = 6.x
+
+; Information added by drupal.org packaging script on 2010-02-10
+version = "6.x-1.6"
+core = "6.x"
+project = "graphviz_filter"
+datestamp = "1265841009"
+
